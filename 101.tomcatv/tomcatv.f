@@ -32,10 +32,6 @@ CC      Oct. 1994                                                     CC
 CC                                                                    CC
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 C                                                                      C
-      implicit none
-
-      include 'omp_lib.h'
-      
       INTEGER	NMAX
 
       PARAMETER (NMAX = 513)
@@ -70,7 +66,7 @@ C
 C     READ INITIAL DATA
 C
       OPEN(10,FILE='TOMCATV.MODEL',STATUS='OLD',ERR=999)
-      GOTO 1
+      goto 1
  999  PRINT *, 'FILE "TOMCATV.MODEL" DOES NOT EXIST; STOP'
       STOP
    1  CONTINUE
@@ -83,7 +79,6 @@ C
 C
 C     READ START CONFIGURATION
 C
-
       DO   10    J = 1,N
       DO   10    I = 1,N
            READ(10,600,END=990) X(I,J),Y(I,J)
@@ -97,16 +92,34 @@ C     START ITERATION LOOP 140
 C
 *FLIP140
       DO      140      ITER = 1, ITACT
-C       
-C     Residuals of ITER iteration
-C  
         RXM(ITER)  = 0.D0
         RYM(ITER)  = 0.D0
-C
-!$omp parallel do private(I, J)
-        DO     60    J = 2,N-1
-C
-          DO     50    I = 2,N-1
+!$omp parallel do private(J,XX,YX,XY,YY,A,B,C,PXX,QXX,PYY,QYY,PXY,QXY,R)
+!$omp& reduction(max:RXM,RYM)
+        DO     50    I = 2,N-1
+          J = 2
+          XX = X(I+1,J)-X(I-1,J)
+          YX = Y(I+1,J)-Y(I-1,J)
+          XY = X(I,J+1)-X(I,J-1)
+          YY = Y(I,J+1)-Y(I,J-1)
+          A  = 0.25D0  * (XY*XY+YY*YY)
+          B  = 0.25D0  * (XX*XX+YX*YX)
+          C  = 0.125D0 * (XX*XY+YX*YY)
+          PXX = X(I+1,J)-2.D0*X(I,J)+X(I-1,J)
+          QXX = Y(I+1,J)-2.D0*Y(I,J)+Y(I-1,J)
+          PYY = X(I,J+1)-2.D0*X(I,J)+X(I,J-1)
+          QYY = Y(I,J+1)-2.D0*Y(I,J)+Y(I,J-1)
+          PXY = X(I+1,J+1)-X(I+1,J-1)-X(I-1,J+1)+X(I-1,J-1)
+          QXY = Y(I+1,J+1)-Y(I+1,J-1)-Y(I-1,J+1)+Y(I-1,J-1)
+          RX(I,J)   = A*PXX+B*PYY-C*PXY
+          RY(I,J)   = A*QXX+B*QYY-C*QXY
+          RXM(ITER) = MAX(RXM(ITER), ABS(RX(I,J)))
+          RYM(ITER) = MAX(RYM(ITER), ABS(RY(I,J)))
+
+          AA(I,J) = -B
+          DD(I,J) = B+B+A*REL
+          D(I,2) = 1.D0/DD(I,2)
+          DO     60    J = 3,N-1
             XX = X(I+1,J)-X(I-1,J)
             YX = Y(I+1,J)-Y(I-1,J)
             XY = X(I,J+1)-X(I,J-1)
@@ -114,90 +127,48 @@ C
             A  = 0.25D0  * (XY*XY+YY*YY)
             B  = 0.25D0  * (XX*XX+YX*YX)
             C  = 0.125D0 * (XX*XY+YX*YY)
-            AA(I,J) = -B
-            DD(I,J) = B+B+A*REL
             PXX = X(I+1,J)-2.D0*X(I,J)+X(I-1,J)
             QXX = Y(I+1,J)-2.D0*Y(I,J)+Y(I-1,J)
             PYY = X(I,J+1)-2.D0*X(I,J)+X(I,J-1)
             QYY = Y(I,J+1)-2.D0*Y(I,J)+Y(I,J-1)
             PXY = X(I+1,J+1)-X(I+1,J-1)-X(I-1,J+1)+X(I-1,J-1)
             QXY = Y(I+1,J+1)-Y(I+1,J-1)-Y(I-1,J+1)+Y(I-1,J-1)
-C
-C     CALCULATE RESIDUALS ( EQUAL TO RIGHT HAND SIDES OF EQUS.)
-C
             RX(I,J)   = A*PXX+B*PYY-C*PXY
             RY(I,J)   = A*QXX+B*QYY-C*QXY
-C
-   50     CONTINUE
-   60   CONTINUE
-
-
-
-C
-C     DETERMINE MAXIMUM VALUES RXM, RYM OF RESIDUALS
-C
-!$omp parallel do private(I, J)
-        DO     80    J = 2,N-1
-          DO     80    I = 2,N-1
             RXM(ITER) = MAX(RXM(ITER), ABS(RX(I,J)))
             RYM(ITER) = MAX(RYM(ITER), ABS(RY(I,J)))
-   80   CONTINUE
-C
-C     SOLVE TRIDIAGONAL SYSTEMS (AA,DD,AA) IN PARALLEL, LU DECOMPOSITION
-C
-!$omp parallel do private(I)
-        DO     90    I = 2,N-1
-          D(I,2) = 1.D0/DD(I,2)
-   90   CONTINUE
 
-
-!$omp parallel do private(I, J)
-        DO    100     J = 3,N-1
-          DO    100     I = 2,N-1
+            AA(I,J) = -B
             R       = AA(I,J)*D(I,J-1)
+            DD(I,J) = B+B+A*REL
             D (I,J) = 1.D0/(DD(I,J)-AA(I,J-1)*R)
             RX(I,J) = RX(I,J) - RX(I,J-1)*R  
             RY(I,J) = RY(I,J) - RY(I,J-1)*R
-  100   CONTINUE
+   60     CONTINUE
 
-!$omp parallel do private(I)
-        DO    110     I = 2,N-1
           RX(I,N-1) = RX(I,N-1)*D(I,N-1)
           RY(I,N-1) = RY(I,N-1)*D(I,N-1)
-  110   CONTINUE
-
-!$omp parallel do private(I, J)
-        DO    120     J = N-2,2,-1
-          DO    120     I = 2,N-1
+          DO    120     J = N-2,2,-1
             RX(I,J) = (RX(I,J)-AA(I,J)*RX(I,J+1))*D(I,J)
             RY(I,J) = (RY(I,J)-AA(I,J)*RY(I,J+1))*D(I,J)
-  120   CONTINUE 
+  120   CONTINUE
+   50   CONTINUE
 
-C
-C     ADD CORRECTIONS OF ITER ITERATION
-C
-!$omp parallel do private(I, J)
-        DO    130     J = 2,N-1
-          DO    130     I = 2,N-1
+!$omp parallel do private(J)
+        DO    130     I = 2,N-1
+          DO    130     J = 2,N-1
             X(I,J) = X(I,J)+RX(I,J)
             Y(I,J) = Y(I,J)+RY(I,J)
   130   CONTINUE
-C
         ABX  = ABS(RXM(ITER))
         ABY  = ABS(RYM(ITER))
         IF (ABX.LE.EPS.AND.ABY.LE.EPS)  GOTO  150
   140 CONTINUE
-C
-C     END OF ITERATION LOOP 140
-C
+C     end iter at 140 
   150 CONTINUE 
-C
-C     OUTPUT OF CONVERGENCE BEHAVIOR
 C
       WRITE (6,1100)
       WRITE (6,1200)
-      
-!$omp parallel do private(I)
       DO     160     I = 1, ITER-1
         WRITE (6,1300)   I, RXM(I), RYM(I)
   160 CONTINUE
