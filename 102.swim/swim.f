@@ -268,8 +268,7 @@ C
       FSDY = 4./DY
 
 C SPEC removed CCMIC$ DO GLOBAL
-!$omp parallel
-!$omp do
+!$omp parallel do private(I, J)
       DO 100 J=1,N
       DO 100 I=1,M
       CU(I+1,J) = .5*(P(I+1,J)+P(I,J))*U(I+1,J)
@@ -279,28 +278,25 @@ C SPEC removed CCMIC$ DO GLOBAL
       H(I,J) = P(I,J)+.25*(U(I+1,J)*U(I+1,J)+U(I,J)*U(I,J)
      1               +V(I,J+1)*V(I,J+1)+V(I,J)*V(I,J))
   100 CONTINUE
-!$omp end do
 
 C
 C     PERIODIC CONTINUATION
 C
-!$omp do
+!$omp parallel do private(J)
       DO 110 J=1,N
       CU(1,J) = CU(M+1,J)
       CV(M+1,J+1) = CV(1,J+1)
       Z(1,J+1) = Z(M+1,J+1)
       H(M+1,J) = H(1,J)
   110 CONTINUE
-!$omp end do
-!$omp do
+
+!$omp parallel do private(I)
       DO 115 I=1,M
       CU(I+1,N+1) = CU(I+1,1)
       CV(I,1) = CV(I,N+1)
       Z(I+1,1) = Z(I+1,N+1)
       H(I,N+1) = H(I,1)
   115 CONTINUE
-!$omp end do
-!$omp end parallel
       CU(1,N+1) = CU(M+1,1)
       CV(M+1,1) = CV(1,N+1)
       Z(1,1) = Z(M+1,N+1)
@@ -330,6 +326,7 @@ C
       TDTSDY = TDT/DY
 
 C SPEC removed CCMIC$ DO GLOBAL
+!$omp parallel do private(I, J)
       DO 200 J=1,N
       DO 200 I=1,M
       UNEW(I+1,J) = UOLD(I+1,J)+
@@ -345,11 +342,13 @@ C SPEC removed CCMIC$ DO GLOBAL
 C
 C     PERIODIC CONTINUATION
 C
+!$omp parallel do private(J)
       DO 210 J=1,N
       UNEW(1,J) = UNEW(M+1,J)
       VNEW(M+1,J+1) = VNEW(1,J+1)
       PNEW(M+1,J) = PNEW(1,J)
   210 CONTINUE
+ !$omp parallel do private(I)
       DO 215 I=1,M
       UNEW(I+1,N+1) = UNEW(I+1,1)
       VNEW(I,1) = VNEW(I,N+1)
@@ -378,6 +377,7 @@ C
      1              NP1,EL,PI,TPI,DI,DJ,PCF
 C
       TDT = TDT+TDT
+!$omp parallel do private(I, J)
       DO 400 J=1,NP1
       DO 400 I=1,MP1
       UOLD(I,J) = U(I,J)
@@ -410,6 +410,7 @@ C        TIME SMOOTHING AND UPDATE FOR NEXT CYCLE
 C
 
 C SPEC removed CCMIC$ DO GLOBAL
+!$omp parallel do private(I, J)
       DO 300 J=1,N
       DO 300 I=1,M
       UOLD(I,J) = U(I,J)+ALPHA*(UNEW(I,J)-2.*U(I,J)+UOLD(I,J))
@@ -423,6 +424,7 @@ C SPEC removed CCMIC$ DO GLOBAL
 C
 C     PERIODIC CONTINUATION
 C
+!$omp parallel do private(J)
       DO 320 J=1,N
       UOLD(M+1,J) = UOLD(1,J)
       VOLD(M+1,J) = VOLD(1,J)
@@ -431,6 +433,7 @@ C
       V(M+1,J) = V(1,J)
       P(M+1,J) = P(1,J)
   320 CONTINUE
+!$omp parallel do private(I)
       DO 325 I=1,M
       UOLD(I,N+1) = UOLD(I,1)
       VOLD(I,N+1) = VOLD(I,1)

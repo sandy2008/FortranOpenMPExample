@@ -83,6 +83,7 @@ C
 C
 C     READ START CONFIGURATION
 C
+
       DO   10    J = 1,N
       DO   10    I = 1,N
            READ(10,600,END=990) X(I,J),Y(I,J)
@@ -102,8 +103,7 @@ C
         RXM(ITER)  = 0.D0
         RYM(ITER)  = 0.D0
 C
-!$omp parallel shared(X, Y, XX, XY, YY, YX), private(I, J)
-!$omp do
+!$omp parallel do private(I, J)
         DO     60    J = 2,N-1
 C
           DO     50    I = 2,N-1
@@ -130,12 +130,13 @@ C
 C
    50     CONTINUE
    60   CONTINUE
-!$omp end do
+
 
 
 C
 C     DETERMINE MAXIMUM VALUES RXM, RYM OF RESIDUALS
 C
+!$omp parallel do private(I, J)
         DO     80    J = 2,N-1
           DO     80    I = 2,N-1
             RXM(ITER) = MAX(RXM(ITER), ABS(RX(I,J)))
@@ -144,13 +145,13 @@ C
 C
 C     SOLVE TRIDIAGONAL SYSTEMS (AA,DD,AA) IN PARALLEL, LU DECOMPOSITION
 C
-!$omp do
+!$omp parallel do private(I)
         DO     90    I = 2,N-1
           D(I,2) = 1.D0/DD(I,2)
    90   CONTINUE
-!$omp end do
 
-!$omp do
+
+!$omp parallel do private(I, J)
         DO    100     J = 3,N-1
           DO    100     I = 2,N-1
             R       = AA(I,J)*D(I,J-1)
@@ -158,24 +159,24 @@ C
             RX(I,J) = RX(I,J) - RX(I,J-1)*R  
             RY(I,J) = RY(I,J) - RY(I,J-1)*R
   100   CONTINUE
-!$omp end do
-!$omp do
+
+!$omp parallel do private(I)
         DO    110     I = 2,N-1
           RX(I,N-1) = RX(I,N-1)*D(I,N-1)
           RY(I,N-1) = RY(I,N-1)*D(I,N-1)
   110   CONTINUE
-!$omp end do
-!$omp do
+
+!$omp parallel do private(I, J)
         DO    120     J = N-2,2,-1
           DO    120     I = 2,N-1
             RX(I,J) = (RX(I,J)-AA(I,J)*RX(I,J+1))*D(I,J)
             RY(I,J) = (RY(I,J)-AA(I,J)*RY(I,J+1))*D(I,J)
   120   CONTINUE 
-!$omp end do
-!$omp end parallel
+
 C
 C     ADD CORRECTIONS OF ITER ITERATION
 C
+!$omp parallel do private(I, J)
         DO    130     J = 2,N-1
           DO    130     I = 2,N-1
             X(I,J) = X(I,J)+RX(I,J)
@@ -195,6 +196,8 @@ C     OUTPUT OF CONVERGENCE BEHAVIOR
 C
       WRITE (6,1100)
       WRITE (6,1200)
+      
+!$omp parallel do private(I)
       DO     160     I = 1, ITER-1
         WRITE (6,1300)   I, RXM(I), RYM(I)
   160 CONTINUE
